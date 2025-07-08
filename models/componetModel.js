@@ -77,7 +77,8 @@ const PanelDesignSchema = new mongoose.Schema({
   units: String,
   parts: [PartSchema],
   panelModel: PanelModelSchema,
-  owner: String
+  owner: String,
+  guestId: String
 });
 
 module.exports = mongoose.model('PanelDesign', PanelDesignSchema);

@@ -5,7 +5,12 @@ const PanelDesign = require('../models/componetModel'); // Adjust path if needed
 // Create a new project
 router.post('/', async (req, res) => {
   const owner = req.user.username;
-  const ownedProject = { ...req.body, owner };
+  let guestId = req.headers.guestId;
+  if (req.user.roles.includes('ANONYMOUS_USER') && !guestId) {
+    // Generate a cryptographically random UUID (v4)
+    guestId = crypto.randomUUID();
+  }
+  const ownedProject = { ...req.body, owner, guestId };
   try {
     const project = new PanelDesign(ownedProject);
     await project.save();
