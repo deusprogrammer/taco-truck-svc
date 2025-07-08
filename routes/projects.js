@@ -6,7 +6,6 @@ const PanelDesign = require('../models/componetModel'); // Adjust path if needed
 router.post('/', async (req, res) => {
   const owner = req.user.username;
   const ownedProject = { ...req.body, owner };
-  console.log("STORING: " + JSON.stringify(ownedProject, null, 5));
   try {
     const project = new PanelDesign(ownedProject);
     await project.save();
