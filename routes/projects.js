@@ -88,12 +88,20 @@ router.get('/:id.:ext', async (req, res) => {
     } else if (req.params.ext === 'dxf') {
       data = createDXF(makerified);
       mimeType = 'image/x-dxf;charset=utf-8';
+    } else if (req.params.ext === 'png') {
+      data = createSVG(makerified);
+      data = sharp(svgBuffer)
+        .png()
+        .toFile('output.png')
+        .then(() => console.log('Converted!'))
+        .catch(err => console.error(err));
+      mimeType = 'image/png+charset=utf-8';
     }
 
     if (!data || !mimeType) {
       return res.status(400).json({ error: 'Invalid export format' });
     }
-    
+
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${project._id}.${req.params.ext}"`);
     return res.send(data);
