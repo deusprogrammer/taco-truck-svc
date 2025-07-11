@@ -87,18 +87,18 @@ router.get('/:id/file.:ext', async (req, res) => {
     let data, mimeType;
     if (req.params.ext === 'svg') {
       data = createSVG(makerified);
-      mimeType = 'image/svg+xml;charset=utf-8';
+      mimeType = 'image/svg+xml';
     } else if (req.params.ext === 'dxf') {
       data = createDXF(makerified);
-      mimeType = 'image/x-dxf;charset=utf-8';
+      mimeType = 'image/x-dxf';
     }
 
     if (!data || !mimeType) {
       return res.status(400).json({ error: 'Invalid export format' });
     }
 
+    res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${project._id}.${req.params.ext}"`);
     return res.send(data);
   } catch (err) {
     console.error(err);
