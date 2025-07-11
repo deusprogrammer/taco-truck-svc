@@ -1,6 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const PanelDesign = require('../models/componetModel'); // Adjust path if needed
+const { simplify, makerify } = require('../utils/utils');
+
+const createSVG = (model) => {
+  return makerjs.exporter.toSVG(model, { units: layout.units });
+}
+
+const createDXF = (model) => {
+  return makerjs.exporter.toDXF(model, { units: layout.units });
+}
 
 // Create a new project
 router.post('/', async (req, res) => {
@@ -50,6 +59,44 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
     return res.json(project);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a single project by ID (and panelDimensions not [0, 0])
+router.get('/:id.:ext', async (req, res) => {
+  try {
+    const project = await PanelDesign.findOne({
+      _id: req.params.id,
+      $or: [
+        { "panelDimensions.0": { $ne: 0 } },
+        { "panelDimensions.1": { $ne: 0 } }
+      ]
+    });
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const simplified = simplify(project);
+    const makerified = makerify(simplified, null, { includeGraphical: false });
+
+    let data, mimeType;
+    if (req.params.ext === 'svg') {
+      data = createSVG(makerified);
+      mimeType = 'image/svg+xml;charset=utf-8';
+    } else if (req.params.ext === 'dxf') {
+      data = createDXF(makerified);
+      mimeType = 'image/x-dxf;charset=utf-8';
+    }
+
+    if (!data || !mimeType) {
+      return res.status(400).json({ error: 'Invalid export format' });
+    }
+    
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${project._id}.${req.params.ext}"`);
+    return res.send(data);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
