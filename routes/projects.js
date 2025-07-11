@@ -3,6 +3,14 @@ const router = express.Router();
 const PanelDesign = require('../models/componetModel'); // Adjust path if needed
 const { simplify, makerify } = require('../utils/utils');
 const makerjs = require('makerjs');
+const { Resvg } = require('@resvg/resvg-js');
+
+const createPNG = (svgData) => {
+  const resvg = new Resvg(svgData);
+  const pngData = resvg.render();
+  return pngData.asPng();
+};
+
 
 const createSVG = (model) => {
   return makerjs.exporter.toSVG(model, { units: 'mm' });
@@ -91,6 +99,10 @@ router.get('/:id/file.:ext', async (req, res) => {
     } else if (req.params.ext === 'dxf') {
       data = createDXF(makerified);
       mimeType = 'image/x-dxf';
+    } else if (req.params.ext === 'png') {
+      const svgData = createSVG(makerified);
+      data = createPNG(svgData);
+      mimeType = 'image/png';
     }
 
     if (!data || !mimeType) {
