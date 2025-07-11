@@ -40,6 +40,14 @@ const PanelModelChildSchema = new mongoose.Schema({
   strokeLinejoin: String,
   strokeMiterlimit: Number,
   strokeDashoffset: Number,
+  graphical: {
+    type: Boolean,
+    default: false
+  },
+  clipPlane: {
+    type: Boolean,
+    default: false
+  },
   // Allow for nested children
   children: [this]
 }, { _id: false });
