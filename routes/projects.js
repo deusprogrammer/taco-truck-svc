@@ -65,7 +65,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Get a single project by ID (and panelDimensions not [0, 0])
-router.get('/:id.:ext', async (req, res) => {
+router.get('/:id/file.:ext', async (req, res) => {
   try {
     const project = await PanelDesign.findOne({
       _id: req.params.id,
