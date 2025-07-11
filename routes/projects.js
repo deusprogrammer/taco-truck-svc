@@ -76,4 +76,27 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Update a single component by ID (and panelDimensions: [0, 0])
+router.put('/:id', async (req, res) => {
+  try {
+    const found = await PanelDesign.findOne({ _id: req.params.id });
+
+    if (!found) {
+      return res.status(404).json({ error: 'Component not found' });
+    }
+
+    if (req.user.username !== found.owner && !req.user.roles.includes('TACO_TRUCK_ADMIN')) {
+      return res.status(403).json({ error: 'User does not have access to update this component' });
+    }
+
+    // Update the component with the new data from req.body
+    Object.assign(found, req.body);
+    await found.save();
+
+    return res.json(found);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
