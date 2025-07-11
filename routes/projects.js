@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const PanelDesign = require('../models/componetModel'); // Adjust path if needed
 const { simplify, makerify } = require('../utils/utils');
+const makerjs = require('makerjs');
 
 const createSVG = (model) => {
-  return makerjs.exporter.toSVG(model, { units: layout.units });
+  return makerjs.exporter.toSVG(model, { units: 'mm' });
 }
 
 const createDXF = (model) => {
-  return makerjs.exporter.toDXF(model, { units: layout.units });
+  return makerjs.exporter.toDXF(model, { units: 'mm' });
 }
 
 // Create a new project
@@ -73,13 +74,15 @@ router.get('/:id/file.:ext', async (req, res) => {
         { "panelDimensions.0": { $ne: 0 } },
         { "panelDimensions.1": { $ne: 0 } }
       ]
-    });
+    }).lean();
+
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     const simplified = simplify(project);
-    const makerified = makerify(simplified, null, { includeGraphical: false });
+    let makerified = makerify(simplified);
+    makerified = makerjs.model.mirror(makerified, false, true);
 
     let data, mimeType;
     if (req.params.ext === 'svg') {
@@ -88,14 +91,6 @@ router.get('/:id/file.:ext', async (req, res) => {
     } else if (req.params.ext === 'dxf') {
       data = createDXF(makerified);
       mimeType = 'image/x-dxf;charset=utf-8';
-    } else if (req.params.ext === 'png') {
-      data = createSVG(makerified);
-      data = sharp(svgBuffer)
-        .png()
-        .toFile('output.png')
-        .then(() => console.log('Converted!'))
-        .catch(err => console.error(err));
-      mimeType = 'image/png+charset=utf-8';
     }
 
     if (!data || !mimeType) {
@@ -106,6 +101,8 @@ router.get('/:id/file.:ext', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${project._id}.${req.params.ext}"`);
     return res.send(data);
   } catch (err) {
+    console.error(err);
+    console.error(new Error().stack);
     return res.status(500).json({ error: err.message });
   }
 });

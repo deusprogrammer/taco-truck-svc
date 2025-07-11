@@ -41,8 +41,14 @@ app.use(cors());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/projects', passport.authenticate("jwt", { session: false }), projectsRouter);
-app.use('/components', passport.authenticate("jwt", { session: false }), componentsRouter);
-app.use('/parts', passport.authenticate("jwt", { session: false }), partsRouter);
+if (process.env.ENVIRONMENT === 'development') {
+    app.use('/projects', projectsRouter);
+    app.use('/components', componentsRouter);
+    app.use('/parts', partsRouter);
+} else {
+    app.use('/projects', passport.authenticate("jwt", { session: false }), projectsRouter);
+    app.use('/components', passport.authenticate("jwt", { session: false }), componentsRouter);
+    app.use('/parts', passport.authenticate("jwt", { session: false }), partsRouter);
+}
 
 module.exports = app;
