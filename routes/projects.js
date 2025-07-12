@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const PanelDesign = require('../models/componetModel'); // Adjust path if needed
+const PanelDesign = require('../models/componentModel'); // Adjust path if needed
 const { simplify, makerify } = require('../utils/utils');
 const makerjs = require('makerjs');
 const { Resvg } = require('@resvg/resvg-js');

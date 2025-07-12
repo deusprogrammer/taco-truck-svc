@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const PanelDesign = require('../models/componetModel'); // Adjust path if needed
+const PanelDesign = require('../models/componentModel'); // Adjust path if needed
 
 // Create a new component
 router.post('/', async (req, res) => {

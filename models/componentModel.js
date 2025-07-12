@@ -82,6 +82,10 @@ const PartSchema = new mongoose.Schema({
 const PanelDesignSchema = new mongoose.Schema({
   name: String,
   panelDimensions: [Number],
+  cornerRadius: {
+    type: Number,
+    default: 0
+  },
   units: String,
   parts: [PartSchema],
   panelModel: PanelModelSchema,
