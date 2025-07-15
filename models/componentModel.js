@@ -74,6 +74,7 @@ const PartSchema = new mongoose.Schema({
   origin: [Number],
   dimensions: [Number],
   anchor: [Number],
+  modelTree: PanelModelSchema,
   partId: String,
   relativeTo: String,
   layout: mongoose.Schema.Types.Mixed // for nested custom layouts
