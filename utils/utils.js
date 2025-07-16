@@ -291,8 +291,6 @@ const calculateSizeOfPart = (part, partTable) => {
         }
         return [width, height]
     } else {
-        console.log("FART: ", part.type, part.partId)
-        console.log("HOLES: " + JSON.stringify(partTable[part.type], null, 5))
         let { size } = partTable?.[part.type]?.[part.partId]
 
         if (Array.isArray(size)) {

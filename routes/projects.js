@@ -13,7 +13,6 @@ const createPNG = (svgData) => {
   return pngData.asPng();
 };
 
-
 const createSVG = (model) => {
   return makerjs.exporter.toSVG(model, { units: 'mm' });
 }

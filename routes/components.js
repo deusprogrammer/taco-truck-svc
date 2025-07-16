@@ -4,6 +4,23 @@ const crypto = require('crypto');
 const {partTable} = require('../data/parts.table.js');
 const PanelDesign = require('../models/componentModel');
 const PartModel = require('../models/partModel');
+const { simplify, makerify } = require('../utils/utils');
+const makerjs = require('makerjs');
+const { Resvg } = require('@resvg/resvg-js');
+
+const createPNG = (svgData) => {
+  const resvg = new Resvg(svgData);
+  const pngData = resvg.render();
+  return pngData.asPng();
+};
+
+const createSVG = (model) => {
+  return makerjs.exporter.toSVG(model, { units: 'mm' });
+}
+
+const createDXF = (model) => {
+  return makerjs.exporter.toDXF(model, { units: 'mm' });
+}
 
 // Create a new component
 router.post('/', async (req, res) => {
