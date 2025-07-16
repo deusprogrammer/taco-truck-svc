@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const {partTable} = require('../data/parts.table.js');
 const PanelDesign = require('../models/componentModel');
 const PartModel = require('../models/partModel');
 
@@ -49,15 +50,21 @@ router.get('/:id', async (req, res) => {
 // Get a single project by ID (and panelDimensions not [0, 0])
 router.get('/:id/file.:ext', async (req, res) => {
   try {
-    const partTable = await PartModel.find();
+    let userParts = await PartModel.find().lean();
+    const partMap = {};
+    userParts?.forEach((customPart) => {
+      partMap[customPart._id] = {...customPart, shape: partTable.VECTOR}
+    })
+    let combinedPartTable = { ...partTable, user: partMap };
+    
     const component = await PanelDesign.findOne({ _id: req.params.id, panelDimensions: [0, 0] }).lean();
 
     if (!component) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const simplified = simplify(component, null, partTable);
-    let makerified = makerify(simplified, null, partTable);
+    const simplified = simplify(component, null, combinedPartTable);
+    let makerified = makerify(simplified, null, combinedPartTable);
     makerified = makerjs.model.mirror(makerified, false, true);
 
     let data, mimeType;

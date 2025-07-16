@@ -1,6 +1,7 @@
 const CIRCLE = 'CIRCLE';
 const SQUARE = 'SQUARE';
 const CUSTOM = 'CUSTOM';
+const VECTOR = 'VECTOR';
 
 const partTable = {
     button: {
@@ -11,6 +12,7 @@ const partTable = {
         'GEN-Menu-20mm': { shape: CIRCLE, size: 20, rim: 2 },
         'GEN-Menu-12mm': { shape: CIRCLE, size: 12, rim: 2 },
         'CHERRY-Keyboard': { shape: SQUARE, size: [18, 18], rim: 1 },
+        'IIDX-Key': { name: 'IIDX Key', shape: SQUARE, size: [33, 50], rim: 1 },
     },
     hole: {
         M3: { shape: CIRCLE, size: 3, rim: 0 },
@@ -28,5 +30,6 @@ module.exports = {
     CIRCLE,
     SQUARE,
     CUSTOM,
+    VECTOR,
     partTable,
 };
