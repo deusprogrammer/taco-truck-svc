@@ -1,10 +1,12 @@
-import { CIRCLE, SQUARE } from '../data/parts.table'
-import axios from 'axios';
+const { CIRCLE, partTable, SQUARE } = require('../data/parts.table');
+const makerjs = require('makerjs');
 
-import makerjs from 'makerjs'
+const removeUnits = (str) => {
+    return parseFloat(str.replace(/[a-zA-Z%]+$/, ''));
+}
 
 // Lazy fix for firebase being too primitive to store nested lists 
-export const convertNestedArraysToObjects = (obj) => {
+const convertNestedArraysToObjects = (obj) => {
     if (Array.isArray(obj)) {
         // If this is an array of arrays of numbers, convert to array of objects
         if (
@@ -25,7 +27,7 @@ export const convertNestedArraysToObjects = (obj) => {
 }
 
 // Lazy fix for firebase being too primitive to store nested lists
-export const convertPointsObjectsToArrays = (obj) => {
+const convertPointsObjectsToArrays = (obj) => {
     if (Array.isArray(obj)) {
         return obj.map(convertPointsObjectsToArrays)
     } else if (obj && typeof obj === 'object') {
@@ -46,7 +48,7 @@ export const convertPointsObjectsToArrays = (obj) => {
     return obj
 }
 
-export const getImageDimensions = (imageUrl) => {
+const getImageDimensions = (imageUrl) => {
     return new Promise((resolve) => {
         const img = new Image()
         img.onload = () => {
@@ -58,7 +60,7 @@ export const getImageDimensions = (imageUrl) => {
     })
 }
 
-export const extractDataUri = (dataUri) => {
+const extractDataUri = (dataUri) => {
     const matches = dataUri.match(/^data:(.*?);base64,(.*)$/);
     if (!matches) {
         throw new Error('Invalid data URI');
@@ -68,7 +70,7 @@ export const extractDataUri = (dataUri) => {
     return [mimeType, base64Payload];
 };
 
-export const storeMedia = async (dataUri, title) => {
+const storeMedia = async (dataUri, title) => {
     let url = `https://deusprogrammer.com/api/img-svc/media`;
     let [mimeType, imagePayload] = extractDataUri(dataUri);
 
@@ -77,7 +79,7 @@ export const storeMedia = async (dataUri, title) => {
     return res.data;
 }
 
-export const replaceUndefined = (obj) => {
+const replaceUndefined = (obj) => {
     if (Array.isArray(obj)) {
         return obj.map(replaceUndefined);
     } else if (obj !== null && typeof obj === 'object') {
@@ -89,7 +91,7 @@ export const replaceUndefined = (obj) => {
     return obj;
 };
 
-export const generateUUID = () => {
+const generateUUID = () => {
     let d = new Date().getTime()
     if (typeof performance !== 'undefined' && performance.now) {
         d += performance.now() //use high-precision timer if available
@@ -104,7 +106,7 @@ export const generateUUID = () => {
     )
 }
 
-export const calculateRelativePosition = (
+const calculateRelativePosition = (
     part,
     parts,
     panelWidth,
@@ -161,7 +163,7 @@ export const calculateRelativePosition = (
     ]
 }
 
-export const calculateTextPositionAndRotation = (
+const calculateTextPositionAndRotation = (
     lineStartX,
     lineStartY,
     lineEndX,
@@ -181,7 +183,7 @@ export const calculateTextPositionAndRotation = (
     return { x: midX + offsetX, y: midY + offsetY, rotation: angle }
 }
 
-export const normalizePartPositionsToZero = (parts, partTable) => {
+const normalizePartPositionsToZero = (parts, partTable) => {
     // Find the minimum x and y values
     let minX = Infinity
     let minY = Infinity
@@ -221,7 +223,7 @@ export const normalizePartPositionsToZero = (parts, partTable) => {
     return parts
 }
 
-export const calculateSizeOfPart = (part, partTable) => {
+const calculateSizeOfPart = (part, partTable) => {
     // console.log(JSON.stringify(part, null, 5));
     if (!part || part?.type === undefined) {
         return [0, 0];
@@ -303,7 +305,7 @@ const clean = (arr) => {
     return arr?.map(value => Number(value));
 }
 
-export const simplify = (layout, parent, partTable) => {
+const simplify = (layout, parent, partTable) => {
     if (!layout) {
         return null
     }
@@ -404,7 +406,7 @@ const convertPartToPath = ({type, partId, position}, partTable) => {
     }
 }
 
-export const makerifyModelTree = (modelTree, options = {}) => {
+const makerifyModelTree = (modelTree, options = {}) => {
     const { header, type, d, width, height, x, y, cx, cy, rx, ry, r, children, transform, graphical } = modelTree || {};
     const { translate, rotate, scale, skewX, skewY } = transform || {};
     const { includeGraphical } = options;
@@ -507,7 +509,7 @@ export const makerifyModelTree = (modelTree, options = {}) => {
     return model;
 }
 
-export const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) => {
+const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) => {
     const { panelDimensions, panelModel, type, position, rotation, cornerRadius, children } = simplifiedLayout
 
     let model = {
@@ -556,77 +558,19 @@ export const makerify = (simplifiedLayout, parent, partTable, options = {}, laye
     return model;
 }
 
-export const login = () => {
-    if (process.env.NODE_ENV === "development") {
-        window.location = `https://deusprogrammer.com/util/auth/dev?redirect=${window.location.protocol}//${window.location.hostname}:${window.location.port}${process.env.PUBLIC_URL}/dev`;
-        return;
-    }
-    window.localStorage.setItem(
-        'twitchRedirect',
-        'https://deusprogrammer.com/taco-truck/designer'
-    )
-    window.location.replace(
-        'https://deusprogrammer.com/util/auth/login'
-    )
-}
-
-export const convertPartModel = (oldData) => {
-    const { name, modelTree, lines, points, curves, geometry, owner } =
-        oldData
-
-    const newGeometry = []
-
-    // Convert lines to geometry objects
-    if (lines && points) {
-        lines.forEach(([startIndex, endIndex]) => {
-            newGeometry.push({
-                type: 'line',
-                attributes: {
-                    start: points[startIndex],
-                    end: points[endIndex],
-                },
-            })
-        })
-    }
-
-    // Convert existing curves to geometry objects
-    if (curves) {
-        curves.forEach((curve) => {
-            newGeometry.push({
-                type: 'curve',
-                attributes: curve,
-            })
-        })
-    }
-
-    // Convert existing geometry to new format
-    if (geometry) {
-        geometry.forEach((geom) => {
-            newGeometry.push({
-                type: geom.shape || 'rectangle',
-                attributes: geom,
-            })
-        })
-    }
-
-    return {
-        name,
-        geometry: newGeometry,
-        modelTree,
-        owner,
-    }
-}
-
-export const decimalToRatio = (decimal) => {
-    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-    
-    const denominator = 1000; // Precision level
-    const numerator = Math.round(decimal * denominator);
-    const divisor = gcd(numerator, denominator);
-    
-    return `${numerator / divisor}:${denominator / divisor}`;
-}
-
-export const removeUnits = (str) => {
-    return parseFloat(str.replace(/[a-zA-Z%]+$/, ''));
-}
+module.exports = {
+    convertNestedArraysToObjects,
+    convertPointsObjectsToArrays,
+    getImageDimensions,
+    extractDataUri,
+    replaceUndefined,
+    generateUUID,
+    calculateRelativePosition,
+    calculateTextPositionAndRotation,
+    normalizePartPositionsToZero,
+    calculateSizeOfPart,
+    simplify,
+    convertPartToPath,
+    makerifyModelTree,
+    makerify,
+};
