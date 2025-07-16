@@ -4,6 +4,7 @@ const PanelDesign = require('../models/componentModel'); // Adjust path if neede
 const { simplify, makerify } = require('../utils/utils');
 const makerjs = require('makerjs');
 const { Resvg } = require('@resvg/resvg-js');
+const PartModel = require('../models/partModel');
 
 const createPNG = (svgData) => {
   const resvg = new Resvg(svgData);
@@ -76,6 +77,7 @@ router.get('/:id', async (req, res) => {
 // Get a single project by ID (and panelDimensions not [0, 0])
 router.get('/:id/file.:ext', async (req, res) => {
   try {
+    const partTable = await PartModel.find();
     const project = await PanelDesign.findOne({
       _id: req.params.id,
       $or: [
@@ -88,8 +90,8 @@ router.get('/:id/file.:ext', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const simplified = simplify(project);
-    let makerified = makerify(simplified);
+    const simplified = simplify(project, null, partTable);
+    let makerified = makerify(simplified, null, partTable);
     makerified = makerjs.model.mirror(makerified, false, true);
 
     let data, mimeType;

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const PanelDesign = require('../models/componentModel'); // Adjust path if needed
+const PanelDesign = require('../models/componentModel');
+const PartModel = require('../models/partModel');
 
 // Create a new component
 router.post('/', async (req, res) => {
@@ -41,6 +42,47 @@ router.get('/:id', async (req, res) => {
     }
     return res.json(component);
   } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a single project by ID (and panelDimensions not [0, 0])
+router.get('/:id/file.:ext', async (req, res) => {
+  try {
+    const partTable = await PartModel.find();
+    const component = await PanelDesign.findOne({ _id: req.params.id, panelDimensions: [0, 0] }).lean();
+
+    if (!component) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const simplified = simplify(component, null, partTable);
+    let makerified = makerify(simplified, null, partTable);
+    makerified = makerjs.model.mirror(makerified, false, true);
+
+    let data, mimeType;
+    if (req.params.ext === 'svg') {
+      data = createSVG(makerified);
+      mimeType = 'image/svg+xml';
+    } else if (req.params.ext === 'dxf') {
+      data = createDXF(makerified);
+      mimeType = 'image/x-dxf';
+    } else if (req.params.ext === 'png') {
+      const svgData = createSVG(makerified);
+      data = createPNG(svgData);
+      mimeType = 'image/png';
+    }
+
+    if (!data || !mimeType) {
+      return res.status(400).json({ error: 'Invalid export format' });
+    }
+
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Content-Type', mimeType);
+    return res.send(data);
+  } catch (err) {
+    console.error(err);
+    console.error(new Error().stack);
     return res.status(500).json({ error: err.message });
   }
 });

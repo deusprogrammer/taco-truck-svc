@@ -1,9 +1,12 @@
-const { CIRCLE, partTable, SQUARE } = require('../data/parts.table');
-const makerjs = require('makerjs');
+import { CIRCLE, SQUARE } from '../data/parts.table'
+import axios from 'axios';
+
+import makerjs from 'makerjs'
 
 // Lazy fix for firebase being too primitive to store nested lists 
-const convertNestedArraysToObjects = (obj) => {
+export const convertNestedArraysToObjects = (obj) => {
     if (Array.isArray(obj)) {
+        // If this is an array of arrays of numbers, convert to array of objects
         if (
             obj.length > 0 &&
             Array.isArray(obj[0]) &&
@@ -22,10 +25,11 @@ const convertNestedArraysToObjects = (obj) => {
 }
 
 // Lazy fix for firebase being too primitive to store nested lists
-const convertPointsObjectsToArrays = (obj) => {
+export const convertPointsObjectsToArrays = (obj) => {
     if (Array.isArray(obj)) {
         return obj.map(convertPointsObjectsToArrays)
     } else if (obj && typeof obj === 'object') {
+        // Convert points: [{x, y}, ...] => [[x, y], ...]
         if (
             Array.isArray(obj.points) &&
             obj.points.length > 0 &&
@@ -42,7 +46,7 @@ const convertPointsObjectsToArrays = (obj) => {
     return obj
 }
 
-const getImageDimensions = (imageUrl) => {
+export const getImageDimensions = (imageUrl) => {
     return new Promise((resolve) => {
         const img = new Image()
         img.onload = () => {
@@ -54,7 +58,7 @@ const getImageDimensions = (imageUrl) => {
     })
 }
 
-const extractDataUri = (dataUri) => {
+export const extractDataUri = (dataUri) => {
     const matches = dataUri.match(/^data:(.*?);base64,(.*)$/);
     if (!matches) {
         throw new Error('Invalid data URI');
@@ -64,7 +68,16 @@ const extractDataUri = (dataUri) => {
     return [mimeType, base64Payload];
 };
 
-const replaceUndefined = (obj) => {
+export const storeMedia = async (dataUri, title) => {
+    let url = `https://deusprogrammer.com/api/img-svc/media`;
+    let [mimeType, imagePayload] = extractDataUri(dataUri);
+
+    let res = await axios.post(url, {mimeType, imagePayload, title});
+
+    return res.data;
+}
+
+export const replaceUndefined = (obj) => {
     if (Array.isArray(obj)) {
         return obj.map(replaceUndefined);
     } else if (obj !== null && typeof obj === 'object') {
@@ -76,10 +89,10 @@ const replaceUndefined = (obj) => {
     return obj;
 };
 
-const generateUUID = () => {
+export const generateUUID = () => {
     let d = new Date().getTime()
     if (typeof performance !== 'undefined' && performance.now) {
-        d += performance.now()
+        d += performance.now() //use high-precision timer if available
     }
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
         /[xy]/g,
@@ -91,12 +104,16 @@ const generateUUID = () => {
     )
 }
 
-const calculateRelativePosition = (
+export const calculateRelativePosition = (
     part,
     parts,
     panelWidth,
     panelHeight
 ) => {
+    if (!part || !part.position || !part.origin) {
+        return [0, 0, 0, 0]
+    }
+
     const {
         position: [x, y],
         origin: [originX, originY],
@@ -104,6 +121,7 @@ const calculateRelativePosition = (
     } = part
     const relativePart = parts.find(({ id }) => id && relativeTo && id === relativeTo)
 
+    // If this part is relative to another part get the other part and use it's position as an offset
     let offsetX = 0
     let offsetY = 0
     if (relativePart) {
@@ -143,7 +161,7 @@ const calculateRelativePosition = (
     ]
 }
 
-const calculateTextPositionAndRotation = (
+export const calculateTextPositionAndRotation = (
     lineStartX,
     lineStartY,
     lineEndX,
@@ -163,7 +181,8 @@ const calculateTextPositionAndRotation = (
     return { x: midX + offsetX, y: midY + offsetY, rotation: angle }
 }
 
-const normalizePartPositionsToZero = (parts) => {
+export const normalizePartPositionsToZero = (parts, partTable) => {
+    // Find the minimum x and y values
     let minX = Infinity
     let minY = Infinity
     parts.forEach((part) => {
@@ -171,7 +190,8 @@ const normalizePartPositionsToZero = (parts) => {
         let xAdj = 0
         let yAdj = 0
 
-        if (part.type && part.type !== 'custom') {
+        // If the part is not a custom part.
+        if (part.type && part.type !== 'custom' && part.type !== 'user') {
             const { size, shape } = partTable[part.type][part.partId]
             xAdj = size
             yAdj = size
@@ -190,6 +210,7 @@ const normalizePartPositionsToZero = (parts) => {
         minY = Math.min(minY, position[1] - yAdj)
     })
 
+    // Normalize each point by subtracting the minimum values
     parts
         .filter(({ relativeTo }) => !relativeTo)
         .forEach((part) => {
@@ -200,14 +221,13 @@ const normalizePartPositionsToZero = (parts) => {
     return parts
 }
 
-const calculateSizeOfPart = (part) => {
+export const calculateSizeOfPart = (part, partTable) => {
+    // console.log(JSON.stringify(part, null, 5));
     if (!part || part?.type === undefined) {
         return [0, 0];
     }
 
-    if (part.type === 'svg') {
-        return [part.header.width, part.header.height]
-    } else if (part.type === 'custom') {
+    if (part.type === 'custom') {
         let minX = Infinity
         let maxX = -Infinity
         let minY = Infinity
@@ -222,11 +242,12 @@ const calculateSizeOfPart = (part) => {
                 layout.panelDimensions[1]
             )
 
+            // If the part is not a custom part.
             let xAdj = 0
             let yAdj = 0
-            if (childPart.type && childPart.type !== 'custom') {
+            if (childPart.type && childPart.type !== 'custom' && childPart.type !== 'user') {
                 const { size, shape } =
-                    partTable[childPart.type][childPart.partId]
+                    partTable?.[childPart.type]?.[childPart?.partId] || {size: 0, shape: CIRCLE}
                 xAdj = size
                 yAdj = size
                 if (Array.isArray(size)) {
@@ -243,7 +264,7 @@ const calculateSizeOfPart = (part) => {
                 maxX = Math.max(maxX, x + xAdj)
                 maxY = Math.max(maxY, y + yAdj)
             } else {
-                ;[xAdj, yAdj] = calculateSizeOfPart(childPart)
+                ;[xAdj, yAdj] = calculateSizeOfPart(childPart, partTable)
                 minX = Math.min(minX, x)
                 minY = Math.min(minY, y)
                 maxX = Math.max(maxX, x + xAdj)
@@ -251,7 +272,22 @@ const calculateSizeOfPart = (part) => {
             }
         })
 
-        return [maxX - minX, maxY - minY]
+        let width = maxX - minX;
+        let height = maxY - minY;
+
+        width = Math.abs(width) === Infinity ? 0 : width
+        height = Math.abs(height) === Infinity ? 0 : height
+
+        return [width, height]
+    } else if (part.type === 'user') {
+        let { width, height, viewBox } = part?.modelTree?.header || { viewBox: {} };
+        width = removeUnits(width || "0mm");
+        height = removeUnits(height || "0mm");
+
+        if (!width && !height) {
+            ({width, height} = viewBox); 
+        }
+        return [width, height]
     } else {
         let { size } = partTable?.[part.type]?.[part.partId]
 
@@ -267,12 +303,12 @@ const clean = (arr) => {
     return arr?.map(value => Number(value));
 }
 
-const simplify = (layout, parent) => {
+export const simplify = (layout, parent, partTable) => {
     if (!layout) {
         return null
     }
 
-    const { panelDimensions, type } = layout
+    const { panelDimensions, type, partId } = layout
     let simplified = { ...layout }
  
     let partsToFlatten = [];
@@ -280,7 +316,7 @@ const simplify = (layout, parent) => {
         if (type === 'custom') {
             const { parts, panelDimensions } = parent
             const [panelWidth, panelHeight] = clean(panelDimensions) || [0, 0]
-            simplified.dimensions = clean(calculateSizeOfPart(layout)) 
+            simplified.dimensions = clean(calculateSizeOfPart(layout, partTable)) 
             simplified.position = clean(calculateRelativePosition(
                 { ...layout, dimensions: [simplified.dimensions[0], simplified.dimensions[1]] },
                 parts,
@@ -294,12 +330,28 @@ const simplify = (layout, parent) => {
                 ...layout.layout,
                 panelDimensions: simplified.dimensions
             }
-        } else if (type === 'svg') {
-            // Do nothing    
+        } else if (type === 'user') {
+            const {modelTree, geometry} = partTable.user[partId]
+            const { parts, panelDimensions } = parent
+            const [panelWidth, panelHeight] = clean(panelDimensions) || [0, 0]
+            simplified = { ...simplified, modelTree, geometry }
+            simplified.dimensions = clean(calculateSizeOfPart({...layout, modelTree, geometry}, partTable)) 
+            simplified.position = clean(calculateRelativePosition(
+                { ...layout, dimensions: [simplified.dimensions[0], simplified.dimensions[1]] },
+                parts,
+                panelWidth,
+                panelHeight
+            )).slice(0, 2)
+            delete simplified.panelDimensions
+
+            parent = {
+                ...layout.layout,
+                panelDimensions: simplified.dimensions
+            }
         } else {
             const { parts, panelDimensions } = parent
             const [panelWidth, panelHeight] = simplified.dimensions = panelDimensions || [0, 0]
-            simplified.dimensions = clean(calculateSizeOfPart(layout))
+            simplified.dimensions = clean(calculateSizeOfPart(layout, partTable))
             simplified.position = clean(calculateRelativePosition(
                 layout,
                 parts,
@@ -316,10 +368,11 @@ const simplify = (layout, parent) => {
 
     simplified.children = [];
     partsToFlatten?.forEach((part) => {
-        const simplifiedChild = simplify(part, parent)
+        const simplifiedChild = simplify(part, parent, partTable)
         simplified.children.push(simplifiedChild)
     });
 
+    // Clean up
     delete simplified.origin
     delete simplified.anchor
     delete simplified.layout
@@ -328,22 +381,22 @@ const simplify = (layout, parent) => {
     return simplified
 }
 
-const convertPartToPath = ({type, partId, position}) => {
+const convertPartToPath = ({type, partId, position}, partTable) => {
     const { shape, size } = partTable[type]?.[partId] || {};
-    const makerjsPos = position;
 
     switch (shape) {
         case CIRCLE: {
             const model = {
                 paths: {
-                    circle: new makerjs.paths.Circle(makerjsPos, size / 2)
+                    circle: new makerjs.paths.Circle(position, size / 2)
                 }
             }
             return model;
         }
         case SQUARE: {
             const model = new makerjs.models.Rectangle(size[0], size[1])
-            model.origin = makerjsPos
+            const [x, y] = position
+            model.origin = [x - size[0]/2, y - size[1]/2]
             return model;
         }
         default:
@@ -351,8 +404,8 @@ const convertPartToPath = ({type, partId, position}) => {
     }
 }
 
-const makerifyModelTree = (modelTree, options = {}) => {
-    const { header, type, d, width, height, x, y, cx, cy, rx, ry, r, children, transform, graphical } = modelTree;
+export const makerifyModelTree = (modelTree, options = {}) => {
+    const { header, type, d, width, height, x, y, cx, cy, rx, ry, r, children, transform, graphical } = modelTree || {};
     const { translate, rotate, scale, skewX, skewY } = transform || {};
     const { includeGraphical } = options;
     
@@ -392,16 +445,19 @@ const makerifyModelTree = (modelTree, options = {}) => {
             model.origin = [x, y];
         }
     } else if (type === 'circle') {
+        // Expect radius and origin in the modelTree
         model = {
             paths: {
                 circle: new makerjs.paths.Circle([cx, cy], r)
             }
         };
     } else if (type === 'polygon') {
+        // modelTree.points is expected to be an array of [x, y] pairs
         if (Array.isArray(modelTree.points) && modelTree.points.length > 1) {
             model = {
                 paths: {}
             };
+            // Draw lines between each point, and close the shape
             for (let i = 0; i < modelTree.points.length; i++) {
                 const start = modelTree.points[i];
                 const end = modelTree.points[(i + 1) % modelTree.points.length];
@@ -414,6 +470,7 @@ const makerifyModelTree = (modelTree, options = {}) => {
             model = {
                 paths: {}
             };
+            // Draw lines between each point, do NOT close the shape
             for (let i = 0; i < modelTree.points.length - 1; i++) {
                 const start = modelTree.points[i];
                 const end = modelTree.points[i + 1];
@@ -422,6 +479,7 @@ const makerifyModelTree = (modelTree, options = {}) => {
         }
         model = makerjs.model.mirror(model, false, true);
     } else {
+        // Handle other types or return empty model
         model = {};
     }
 
@@ -449,7 +507,7 @@ const makerifyModelTree = (modelTree, options = {}) => {
     return model;
 }
 
-const makerify = (simplifiedLayout, parent, options = {}, layer = 0) => {
+export const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) => {
     const { panelDimensions, panelModel, type, position, rotation, cornerRadius, children } = simplifiedLayout
 
     let model = {
@@ -473,29 +531,32 @@ const makerify = (simplifiedLayout, parent, options = {}, layer = 0) => {
     }
 
     children.filter((child) => child.type === 'custom').forEach((child, index) => {
-        model.models[`customs-${index}`] = makerify(child, parent, options, layer++);
+        model.models[`customs-${index}`] = makerify(child, parent, partTable, options, layer++);
     })
     children.filter((child) => child.type !== 'custom' && child.type !== 'svg').forEach((child, index) => {
-        model.models[`parts-${index}`] = convertPartToPath(child);
+        model.models[`parts-${index}`] = convertPartToPath(child, partTable);
     })
-    children.filter((child) => child.type === 'svg').forEach((child, index) => {
-        // Unimplemented
+    children.filter((child) => child.type === 'user').forEach((child, index) => {
+        const [x, y] = child.position;
+        let userModel = makerjs.model.mirror(makerifyModelTree(child.modelTree, options), false, true);
+        userModel = makerjs.model.rotate(userModel, rotation, [0, 0]);
+        userModel = makerjs.model.moveRelative(userModel, [x, y]);
+        model.models[`user-parts-${index}`] = userModel;
     })
 
     if (parent) {
         if (type === 'custom') {
+            // Makerjs building
             const [x, y] = position;
             model = makerjs.model.rotate(model, rotation, [0, 0]);
             model = makerjs.model.moveRelative(model, [x, y]);
-        } else if (type === 'svg') {
-            // Unimplemented
-        }
+        } 
     } 
 
     return model;
 }
 
-const login = () => {
+export const login = () => {
     if (process.env.NODE_ENV === "development") {
         window.location = `https://deusprogrammer.com/util/auth/dev?redirect=${window.location.protocol}//${window.location.hostname}:${window.location.port}${process.env.PUBLIC_URL}/dev`;
         return;
@@ -509,20 +570,63 @@ const login = () => {
     )
 }
 
-module.exports = {
-    convertNestedArraysToObjects,
-    convertPointsObjectsToArrays,
-    getImageDimensions,
-    extractDataUri,
-    replaceUndefined,
-    generateUUID,
-    calculateRelativePosition,
-    calculateTextPositionAndRotation,
-    normalizePartPositionsToZero,
-    calculateSizeOfPart,
-    simplify,
-    convertPartToPath,
-    makerifyModelTree,
-    makerify,
-    login
-};
+export const convertPartModel = (oldData) => {
+    const { name, modelTree, lines, points, curves, geometry, owner } =
+        oldData
+
+    const newGeometry = []
+
+    // Convert lines to geometry objects
+    if (lines && points) {
+        lines.forEach(([startIndex, endIndex]) => {
+            newGeometry.push({
+                type: 'line',
+                attributes: {
+                    start: points[startIndex],
+                    end: points[endIndex],
+                },
+            })
+        })
+    }
+
+    // Convert existing curves to geometry objects
+    if (curves) {
+        curves.forEach((curve) => {
+            newGeometry.push({
+                type: 'curve',
+                attributes: curve,
+            })
+        })
+    }
+
+    // Convert existing geometry to new format
+    if (geometry) {
+        geometry.forEach((geom) => {
+            newGeometry.push({
+                type: geom.shape || 'rectangle',
+                attributes: geom,
+            })
+        })
+    }
+
+    return {
+        name,
+        geometry: newGeometry,
+        modelTree,
+        owner,
+    }
+}
+
+export const decimalToRatio = (decimal) => {
+    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+    
+    const denominator = 1000; // Precision level
+    const numerator = Math.round(decimal * denominator);
+    const divisor = gcd(numerator, denominator);
+    
+    return `${numerator / divisor}:${denominator / divisor}`;
+}
+
+export const removeUnits = (str) => {
+    return parseFloat(str.replace(/[a-zA-Z%]+$/, ''));
+}
