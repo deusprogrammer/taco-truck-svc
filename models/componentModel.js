@@ -71,6 +71,7 @@ const PartSchema = new mongoose.Schema({
   id: String,
   type: String,
   position: [Number],
+  rotation: [Number],
   origin: [Number],
   dimensions: [Number],
   anchor: [Number],
