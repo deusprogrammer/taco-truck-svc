@@ -9,7 +9,7 @@ const makerjs = require('makerjs');
 const { Resvg } = require('@resvg/resvg-js');
 
 const createPNG = (svgData) => {
-  const resvg = new Resvg(svgData);
+  const resvg = new Resvg(svgData, { background: 'white' });
   const pngData = resvg.render();
   return pngData.asPng();
 };

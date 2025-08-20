@@ -8,7 +8,7 @@ const {partTable} = require('../data/parts.table.js');
 const PartModel = require('../models/partModel');
 
 const createPNG = (svgData) => {
-  const resvg = new Resvg(svgData);
+  const resvg = new Resvg(svgData, { background: 'white' });
   const pngData = resvg.render();
   return pngData.asPng();
 };
