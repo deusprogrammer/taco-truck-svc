@@ -80,6 +80,7 @@ const PartSchema = new mongoose.Schema({
   relativeTo: String,
   flipX: Boolean,
   flipY: Boolean,
+  mapping: Number,
   layout: mongoose.Schema.Types.Mixed // for nested custom layouts
 }, { _id: false });
 
