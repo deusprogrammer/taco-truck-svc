@@ -78,6 +78,8 @@ const PartSchema = new mongoose.Schema({
   modelTree: PanelModelSchema,
   partId: String,
   relativeTo: String,
+  flipX: Boolean,
+  flipY: Boolean,
   layout: mongoose.Schema.Types.Mixed // for nested custom layouts
 }, { _id: false });
 
