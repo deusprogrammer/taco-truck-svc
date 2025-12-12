@@ -53,6 +53,11 @@ const PathDataChildSchema = new mongoose.Schema({
   strokeLinejoin: String,
   strokeMiterlimit: Number,
   strokeDashoffset: Number,
+  layer: {
+    type: String,
+    enum: ['both', 'top', 'bottom', 'none'],
+    default: 'both'
+  },
   children: [this]
 }, { _id: false });
 

@@ -44,6 +44,11 @@ const PanelModelChildSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  layer: {
+    type: String,
+    enum: ['both', 'top', 'bottom', 'none'],
+    default: 'both'
+  },
   clipPlane: {
     type: Boolean,
     default: false
@@ -81,6 +86,11 @@ const PartSchema = new mongoose.Schema({
   flipX: Boolean,
   flipY: Boolean,
   mapping: Number,
+  layer: {
+    type: String,
+    enum: ['both', 'top', 'bottom', 'none'],
+    default: 'both'
+  },
   layout: mongoose.Schema.Types.Mixed // for nested custom layouts
 }, { _id: false });
 
