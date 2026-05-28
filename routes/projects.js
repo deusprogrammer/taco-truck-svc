@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PanelDesign = require('../models/componentModel'); // Adjust path if needed
-const { simplify, makerify } = require('../utils/utils');
+const { simplify, makerify, BOTTOM_LAYER_BUTTON_ENLARGEMENT } = require('../utils/utils');
 const makerjs = require('makerjs');
 const { Resvg } = require('@resvg/resvg-js');
 const {partTable} = require('../data/parts.table.js');
@@ -96,8 +96,22 @@ router.get('/:id/file.:ext', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
+    const { layer, experimental } = req.query;
+    const validLayers = ['top', 'bottom'];
+    if (layer && !validLayers.includes(layer)) {
+      return res.status(400).json({ error: 'Invalid layer. Must be "top" or "bottom".' });
+    }
+
+    const makerifyOptions = { targetLayer: layer || null };
+    if (layer === 'bottom') {
+      makerifyOptions.buttonEnlargement = BOTTOM_LAYER_BUTTON_ENLARGEMENT;
+      if (experimental === 'true') {
+        makerifyOptions.useButtonClustering = true;
+      }
+    }
+
     const simplified = simplify(project, null, combinedPartTable);
-    let makerified = makerify(simplified, null, combinedPartTable);
+    let makerified = makerify(simplified, null, combinedPartTable, makerifyOptions);
     makerified = makerjs.model.mirror(makerified, false, true);
 
     let data, mimeType;
