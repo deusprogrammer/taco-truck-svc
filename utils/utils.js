@@ -849,6 +849,7 @@ const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) 
         allVectorParts.forEach((part, index) => {
             const pos = part.panelPosition || part.position || [0, 0];
             let partModel = makerjs.model.mirror(makerifyModelTree(part.modelTree, options), false, true);
+            partModel = makerjs.model.rotate(partModel, part.rotation || 0, [0, 0]);
             partModel = makerjs.model.moveRelative(partModel, pos);
             model.models[`vector-${index}`] = partModel;
         });
@@ -872,8 +873,9 @@ const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) 
         }).forEach((child, index) => {
             model.models[`parts-${index}`] = convertPartToPath(child, partTable, options);
         })
+    }
 
-        children.filter((child) => {
+    if (!shouldCluster || parent?.isNested) children.filter((child) => {
             if (child.type !== 'user') return false;
             const partLayer = child.layer || 'both';
             if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
@@ -881,11 +883,10 @@ const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) 
         }).forEach((child, index) => {
             const [x, y] = child.position;
             let userModel = makerjs.model.mirror(makerifyModelTree(child.modelTree, options), false, true);
-            userModel = makerjs.model.rotate(userModel, rotation, [0, 0]);
+            userModel = makerjs.model.rotate(userModel, child.rotation || 0, [0, 0]);
             userModel = makerjs.model.moveRelative(userModel, [x, y]);
             model.models[`user-parts-${index}`] = userModel;
         })
-    }
 
     if (parent) {
         if (type === 'custom') {
