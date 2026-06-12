@@ -112,15 +112,19 @@ const calculateRelativePosition = (
     panelWidth,
     panelHeight
 ) => {
-    if (!part || !part.position || !part.origin) {
+    if (!part || !part.position) {
         return [0, 0, 0, 0]
     }
+
+    // Handle empty arrays for position and origin
+    const position = (Array.isArray(part.position) && part.position.length >= 2) ? part.position : [0, 0]
+    const origin = (Array.isArray(part.origin) && part.origin.length >= 2) ? part.origin : [0, 0]
 
     const {
         position: [x, y],
         origin: [originX, originY],
         relativeTo,
-    } = part
+    } = { ...part, position, origin }
     const relativePart = parts.find(({ id }) => id && relativeTo && id === relativeTo)
 
     // If this part is relative to another part get the other part and use it's position as an offset
@@ -149,11 +153,15 @@ const calculateRelativePosition = (
         part.dimensions = [0, 0]
     }
 
-    anchorAdjustmentX = part.anchor[0] * part.dimensions[0]
-    anchorAdjustmentY = part.anchor[1] * part.dimensions[1]
+    // Only apply anchor adjustments for custom and user parts
+    // Basic parts should always be positioned at their center
+    if (part.type === 'custom' || part.type === 'user') {
+        anchorAdjustmentX = part.anchor[0] * part.dimensions[0]
+        anchorAdjustmentY = part.anchor[1] * part.dimensions[1]
+    }
 
-    originCoordX = originX * panelWidth
-    originCoordY = originY * panelHeight
+    originCoordX = (originX || 0) * panelWidth
+    originCoordY = (originY || 0) * panelHeight
 
     return [
         originCoordX + x + offsetX - anchorAdjustmentX,
@@ -305,12 +313,31 @@ const clean = (arr) => {
     return arr?.map(value => Number(value));
 }
 
-const simplify = (layout, parent, partTable) => {
+const calculatePanelPosition = (
+    localPosition,
+    parentPanelPosition = [0, 0]
+) => {
+    if (!localPosition || localPosition.length < 2) {
+        return parentPanelPosition
+    }
+
+    return [
+        parentPanelPosition[0] + localPosition[0],
+        parentPanelPosition[1] + localPosition[1]
+    ]
+}
+
+const simplify = (layout, parent, partTable, rootLayout = null, parentPanelPosition = [0, 0]) => {
     if (!layout) {
         return null
     }
 
-    const { panelDimensions, type, partId } = layout
+    // If no rootLayout provided, this is the root call
+    if (!rootLayout) {
+        rootLayout = parent || layout
+    }
+
+    let { panelDimensions, type, partId, modelTree, geometry } = layout
     let simplified = { ...layout }
  
     let partsToFlatten = [];
@@ -318,13 +345,24 @@ const simplify = (layout, parent, partTable) => {
         if (type === 'custom') {
             const { parts, panelDimensions } = parent
             const [panelWidth, panelHeight] = clean(panelDimensions) || [0, 0]
-            simplified.dimensions = clean(calculateSizeOfPart(layout, partTable)) 
-            simplified.position = clean(calculateRelativePosition(
-                { ...layout, dimensions: [simplified.dimensions[0], simplified.dimensions[1]] },
-                parts,
-                panelWidth,
-                panelHeight
-            )).slice(0, 2)
+            simplified.dimensions = clean(calculateSizeOfPart(layout, partTable))
+
+            // Use absolutePosition if available (from augmentLayoutWithAbsolutePositions)
+            // otherwise fall back to calculating it
+            if (layout.absolutePosition) {
+                simplified.position = clean(layout.absolutePosition)
+            } else {
+                simplified.position = clean(calculateRelativePosition(
+                    { ...layout, dimensions: [simplified.dimensions[0], simplified.dimensions[1]] },
+                    parts,
+                    panelWidth,
+                    panelHeight
+                )).slice(0, 2)
+            }
+
+            // Calculate panelPosition by adding local position to parent's panel position
+            simplified.panelPosition = calculatePanelPosition(simplified.position, parentPanelPosition)
+
             delete simplified.panelDimensions
             partsToFlatten = layout.layout.parts
 
@@ -333,17 +371,33 @@ const simplify = (layout, parent, partTable) => {
                 panelDimensions: simplified.dimensions
             }
         } else if (type === 'user') {
-            const {modelTree, geometry} = partTable.user[partId]
+            if (!geometry) {
+                geometry = partTable.user[partId]?.geometry || {}
+            }
+            if (!modelTree) {
+                modelTree = partTable.user[partId]?.modelTree || {}
+            }
             const { parts, panelDimensions } = parent
             const [panelWidth, panelHeight] = clean(panelDimensions) || [0, 0]
             simplified = { ...simplified, modelTree, geometry }
-            simplified.dimensions = clean(calculateSizeOfPart({...layout, modelTree, geometry}, partTable)) 
-            simplified.position = clean(calculateRelativePosition(
-                { ...layout, dimensions: [simplified.dimensions[0], simplified.dimensions[1]] },
-                parts,
-                panelWidth,
-                panelHeight
-            )).slice(0, 2)
+            simplified.dimensions = clean(calculateSizeOfPart({...layout, modelTree, geometry}, partTable))
+
+            // Use absolutePosition if available (from augmentLayoutWithAbsolutePositions)
+            // otherwise fall back to calculating it
+            if (layout.absolutePosition) {
+                simplified.position = clean(layout.absolutePosition)
+            } else {
+                simplified.position = clean(calculateRelativePosition(
+                    { ...layout, dimensions: [simplified.dimensions[0], simplified.dimensions[1]] },
+                    parts,
+                    panelWidth,
+                    panelHeight
+                )).slice(0, 2)
+            }
+
+            // Calculate panelPosition by adding local position to parent's panel position
+            simplified.panelPosition = calculatePanelPosition(simplified.position, parentPanelPosition)
+
             delete simplified.panelDimensions
 
             parent = {
@@ -352,14 +406,25 @@ const simplify = (layout, parent, partTable) => {
             }
         } else {
             const { parts, panelDimensions } = parent
-            const [panelWidth, panelHeight] = simplified.dimensions = panelDimensions || [0, 0]
+            const [panelWidth, panelHeight] = clean(panelDimensions) || [0, 0]
             simplified.dimensions = clean(calculateSizeOfPart(layout, partTable))
-            simplified.position = clean(calculateRelativePosition(
-                layout,
-                parts,
-                panelWidth,
-                panelHeight
-            )).slice(0, 2)
+
+            // Use absolutePosition if available (from augmentLayoutWithAbsolutePositions)
+            // otherwise fall back to calculating it
+            if (layout.absolutePosition) {
+                simplified.position = clean(layout.absolutePosition)
+            } else {
+                simplified.position = clean(calculateRelativePosition(
+                    layout,
+                    parts,
+                    panelWidth,
+                    panelHeight
+                )).slice(0, 2)
+            }
+
+            // Calculate panelPosition by adding local position to parent's panel position
+            simplified.panelPosition = calculatePanelPosition(simplified.position, parentPanelPosition)
+
             partsToFlatten = null
         }
     } else {
@@ -370,7 +435,8 @@ const simplify = (layout, parent, partTable) => {
 
     simplified.children = [];
     partsToFlatten?.forEach((part) => {
-        const simplifiedChild = simplify(part, parent, partTable)
+        // Pass the current part's panelPosition as the parentPanelPosition for children
+        const simplifiedChild = simplify(part, parent, partTable, rootLayout, simplified.panelPosition || parentPanelPosition)
         simplified.children.push(simplifiedChild)
     });
 
@@ -413,6 +479,26 @@ const convertPartToPath = ({type, partId, position, rx, ry, cx, cy}, partTable, 
             const model = new makerjs.models.Rectangle(enlargedWidth, enlargedHeight)
             const [x, y] = position
             model.origin = [x - enlargedWidth/2, y - enlargedHeight/2]
+            return model;
+        }
+        case 'ellipse': {
+            // Use cx, cy, rx, ry if available, otherwise fallback to position and size
+            const center = cx !== undefined && cy !== undefined ? [cx, cy] : position;
+            const radiusX = rx !== undefined ? rx : (Array.isArray(size) ? size[0] / 2 : size / 2);
+            const radiusY = ry !== undefined ? ry : (Array.isArray(size) ? size[1] / 2 : size / 2);
+            const model = {
+                paths: {
+                    ellipse: new makerjs.paths.Ellipse(center, radiusX, radiusY),
+                    hLine: drillingGuide ? new makerjs.paths.Line(
+                        [center[0] - radiusX, center[1]],
+                        [center[0] + radiusX, center[1]]
+                    ) : null,
+                    vLine: drillingGuide ? new makerjs.paths.Line(
+                        [center[0], center[1] - radiusY],
+                        [center[0], center[1] + radiusY]
+                    ) : null
+                }
+            }
             return model;
         }
         default:
@@ -466,60 +552,45 @@ const clusterButtons = (buttons, distanceThreshold) => {
 const collectAllButtons = (simplified, targetLayer) => {
     const buttons = [];
 
-    const traverse = (node, offset) => {
+    const traverse = (node) => {
         if (!node) return;
 
         if (node.type === 'button') {
             const partLayer = node.layer || 'both';
             if (!targetLayer || partLayer === 'both' || partLayer === targetLayer) {
-                const absPos = [
-                    (node.position?.[0] || 0) + offset[0],
-                    (node.position?.[1] || 0) + offset[1]
-                ];
-                buttons.push({ ...node, panelPosition: absPos });
+                buttons.push(node);
             }
         }
 
         if (node.children && node.children.length > 0) {
-            // Buttons inside a custom part have positions local to that part.
-            // Accumulate the custom part's absolute position as an offset for its children.
-            const childOffset = node.type === 'custom'
-                ? [offset[0] + (node.position?.[0] || 0), offset[1] + (node.position?.[1] || 0)]
-                : offset;
-            node.children.forEach(child => traverse(child, childOffset));
+            node.children.forEach(child => traverse(child));
         }
     };
 
-    traverse(simplified, [0, 0]);
+    traverse(simplified);
     return buttons;
 };
 
+// Recursively collect all user/svg parts from simplified tree, using panelPosition
 const collectAllVectorParts = (simplified, targetLayer) => {
     const parts = [];
 
-    const traverse = (node, offset) => {
+    const traverse = (node) => {
         if (!node) return;
 
         if (node.type === 'user' || node.type === 'svg') {
             const partLayer = node.layer || 'both';
             if (!targetLayer || partLayer === 'both' || partLayer === targetLayer) {
-                const absPos = [
-                    (node.position?.[0] || 0) + offset[0],
-                    (node.position?.[1] || 0) + offset[1]
-                ];
-                parts.push({ ...node, panelPosition: absPos });
+                parts.push(node);
             }
         }
 
         if (node.children && node.children.length > 0) {
-            const childOffset = node.type === 'custom'
-                ? [offset[0] + (node.position?.[0] || 0), offset[1] + (node.position?.[1] || 0)]
-                : offset;
-            node.children.forEach(child => traverse(child, childOffset));
+            node.children.forEach(child => traverse(child));
         }
     };
 
-    traverse(simplified, [0, 0]);
+    traverse(simplified);
     return parts;
 };
 
@@ -683,7 +754,7 @@ const createClusterOutline = (cluster, partTable, offset) => {
 const makerifyModelTree = (modelTree, options = {}) => {
     const { header, type, d, width, height, x, y, cx, cy, rx, ry, r, children, transform, graphical, layer } = modelTree || {};
     const { translate, rotate, scale, skewX, skewY } = transform || {};
-    const { includeGraphical, targetLayer } = options;
+    const { includeGraphical, drillingGuide, targetLayer } = options;
     
     let model = {};
 
@@ -693,6 +764,7 @@ const makerifyModelTree = (modelTree, options = {}) => {
         return model;
     }
 
+    // Legacy graphical support
     if (!includeGraphical && graphical) {
         return model;
     }
@@ -721,28 +793,33 @@ const makerifyModelTree = (modelTree, options = {}) => {
         })
     } else if (type === 'rectangle') {
         if (rx && ry) {
-            model = new makerjs.models.RoundRectangle(width, height, (rx + ry) / 2);
+            model = makerjs.model.mirror(new makerjs.models.RoundRectangle(width, height, (rx + ry) / 2), false, true);
         } else {
-            model = new makerjs.models.Rectangle(width, height);
+            model = makerjs.model.mirror(new makerjs.models.Rectangle(width, height), false, true);
             model.origin = [x, y];
         }
     } else if (type === 'circle') {
-        // Expect radius and origin in the modelTree
-        model = {
+        const center = [cx, cy];
+        model = makerjs.model.mirror({
             paths: {
-                circle: new makerjs.paths.Circle([cx, cy], r)
+                circle: new makerjs.paths.Circle(center, r),
+                hLine: drillingGuide ? new makerjs.paths.Line(
+                    [cx - r, cy],
+                    [cx + r, cy]
+                ) : null,
+                vLine: drillingGuide ? new makerjs.paths.Line(
+                    [cx, cy - r],
+                    [cx, cy + r]
+                ) : null
             }
-        };
+        }, false, true);
     } else if (type === 'ellipse') {
-        // Expect cx, cy, rx, ry in the modelTree
         model = makerjs.model.mirror(new makerjs.models.Ellipse([cx, cy], rx, ry), false, true);
     } else if (type === 'polygon') {
-        // modelTree.points is expected to be an array of [x, y] pairs
         if (Array.isArray(modelTree.points) && modelTree.points.length > 1) {
             model = {
                 paths: {}
             };
-            // Draw lines between each point, and close the shape
             for (let i = 0; i < modelTree.points.length; i++) {
                 const start = modelTree.points[i];
                 const end = modelTree.points[(i + 1) % modelTree.points.length];
@@ -755,7 +832,6 @@ const makerifyModelTree = (modelTree, options = {}) => {
             model = {
                 paths: {}
             };
-            // Draw lines between each point, do NOT close the shape
             for (let i = 0; i < modelTree.points.length - 1; i++) {
                 const start = modelTree.points[i];
                 const end = modelTree.points[i + 1];
@@ -764,7 +840,6 @@ const makerifyModelTree = (modelTree, options = {}) => {
         }
         model = makerjs.model.mirror(model, false, true);
     } else {
-        // Handle other types or return empty model
         model = {};
     }
 
@@ -793,7 +868,7 @@ const makerifyModelTree = (modelTree, options = {}) => {
 }
 
 const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) => {
-    const { panelDimensions, panelModel, type, position, rotation, cornerRadius, children } = simplifiedLayout
+    const { panelDimensions, panelModel, type, position, rotation, cornerRadius, children, flipX, flipY } = simplifiedLayout
 
     let model = {
         models: {},
@@ -815,84 +890,147 @@ const makerify = (simplifiedLayout, parent, partTable, options = {}, layer = 0) 
         model.units = simplifiedLayout.units;
     }
 
-    const { targetLayer, buttonEnlargement, useButtonClustering } = options;
+    // Check if we should use button clustering for bottom layer
+    const { buttonEnlargement, useButtonClustering } = options;
     const shouldCluster = useButtonClustering && buttonEnlargement > 0;
 
-    // When clustering, custom parts are transparent - collect their buttons directly
+    // Only process custom parts recursively if we're NOT clustering at this level
+    // When clustering, custom parts are transparent - we collect their buttons directly
     if (!shouldCluster || parent?.isNested) {
         children.filter((child) => {
             if (child.type !== 'custom') return false;
             const partLayer = child.layer || 'both';
+            const { targetLayer } = options;
             if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
             return true;
         }).forEach((child, index) => {
             model.models[`customs-${index}`] = makerify(child, parent, partTable, options, layer++);
         })
     }
-
+    
     if (shouldCluster && !parent?.isNested) {
+        const { targetLayer } = options;
         const allButtons = collectAllButtons(simplifiedLayout, targetLayer);
 
         if (allButtons.length > 0) {
             const clusters = clusterButtons(allButtons, CLUSTER_DISTANCE_THRESHOLD);
 
             clusters.forEach((cluster, clusterIndex) => {
-                const outline = createClusterOutline(cluster, partTable, buttonEnlargement);
-                if (outline) {
-                    model.models[`cluster-${clusterIndex}`] = outline;
+                if (cluster.length === 1) {
+                    const outline = createClusterOutline(cluster, partTable, buttonEnlargement);
+                    if (outline) {
+                        model.models[`button-${clusterIndex}`] = outline;
+                    }
+                } else {
+                    const outline = createClusterOutline(cluster, partTable, buttonEnlargement);
+                    if (outline) {
+                        model.models[`cluster-${clusterIndex}`] = outline;
+                    }
                 }
             });
+
+            // Collect and add ALL vector parts (user/svg) from entire tree
+            const allVectorParts = collectAllVectorParts(simplifiedLayout, targetLayer);
+            allVectorParts.forEach((part, index) => {
+                const position = part.panelPosition || part.position || [0, 0];
+                let partModel = makerjs.model.mirror(makerifyModelTree(part.modelTree, options), false, true);
+                partModel = makerjs.model.rotate(partModel, part.rotation || 0, [0, 0]);
+                partModel = makerjs.model.moveRelative(partModel, position);
+                model.models[`vector-${index}`] = partModel;
+            });
+
+            // Add other non-button, non-vector parts from root level only
+            children.filter((child) => {
+                if (child.type === 'custom' || child.type === 'button' || child.type === 'user' || child.type === 'svg') return false;
+                const partLayer = child.layer || 'both';
+                if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
+                return true;
+            }).forEach((child, index) => {
+                model.models[`parts-${index}`] = convertPartToPath(child, partTable, options);
+            });
+        } else {
+            // No buttons to cluster, but still need to collect ALL vector parts from tree
+            const allVectorParts = collectAllVectorParts(simplifiedLayout, targetLayer);
+            allVectorParts.forEach((part, index) => {
+                const position = part.panelPosition || part.position || [0, 0];
+                let partModel = makerjs.model.mirror(makerifyModelTree(part.modelTree, options), false, true);
+                partModel = makerjs.model.rotate(partModel, part.rotation || 0, [0, 0]);
+                partModel = makerjs.model.moveRelative(partModel, position);
+                model.models[`vector-${index}`] = partModel;
+            });
+
+            // Add other non-button, non-vector parts from root level only
+            children.filter((child) => {
+                if (child.type === 'custom' || child.type === 'button' || child.type === 'user' || child.type === 'svg') return false;
+                const partLayer = child.layer || 'both';
+                if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
+                return true;
+            }).forEach((child, index) => {
+                model.models[`parts-${index}`] = convertPartToPath(child, partTable, options);
+            });
         }
-
-        // Collect ALL vector parts (user/svg) from entire tree
-        const allVectorParts = collectAllVectorParts(simplifiedLayout, targetLayer);
-        allVectorParts.forEach((part, index) => {
-            const pos = part.panelPosition || part.position || [0, 0];
-            let partModel = makerjs.model.mirror(makerifyModelTree(part.modelTree, options), false, true);
-            partModel = makerjs.model.rotate(partModel, part.rotation || 0, [0, 0]);
-            partModel = makerjs.model.moveRelative(partModel, pos);
-            model.models[`vector-${index}`] = partModel;
-        });
-
-        // Add non-button, non-vector parts from root level only
-        children.filter((child) => {
-            if (child.type === 'custom' || child.type === 'button' || child.type === 'user' || child.type === 'svg') return false;
-            const partLayer = child.layer || 'both';
-            if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
-            return true;
-        }).forEach((child, index) => {
-            model.models[`parts-${index}`] = convertPartToPath(child, partTable, options);
-        });
     } else {
         // Normal processing without clustering
         children.filter((child) => {
             if (child.type === 'custom' || child.type === 'svg' || child.type === 'user') return false;
             const partLayer = child.layer || 'both';
+            const { targetLayer } = options;
             if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
             return true;
         }).forEach((child, index) => {
             model.models[`parts-${index}`] = convertPartToPath(child, partTable, options);
-        })
+        });
     }
 
     if (!shouldCluster || parent?.isNested) children.filter((child) => {
-            if (child.type !== 'user') return false;
-            const partLayer = child.layer || 'both';
-            if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
-            return true;
-        }).forEach((child, index) => {
-            const [x, y] = child.position;
-            let userModel = makerjs.model.mirror(makerifyModelTree(child.modelTree, options), false, true);
-            userModel = makerjs.model.rotate(userModel, child.rotation || 0, [0, 0]);
-            userModel = makerjs.model.moveRelative(userModel, [x, y]);
-            model.models[`user-parts-${index}`] = userModel;
-        })
+        if (child.type !== 'user') return false;
+        const partLayer = child.layer || 'both';
+        const { targetLayer } = options;
+        if (targetLayer && partLayer !== 'both' && partLayer !== targetLayer) return false;
+        return true;
+    }).forEach((child, index) => {
+        const [x, y] = child.position;
+        let userModel = makerjs.model.mirror(makerifyModelTree(child.modelTree, options), false, true);
+        userModel = makerjs.model.rotate(userModel, child.rotation || 0, [0, 0]);
+
+        // Apply flipping for user parts (ComplexParts)
+        if (child.flipX || child.flipY) {
+            const bbox = makerjs.measure.modelExtents(userModel);
+            if (bbox) {
+                const centerX = (bbox.high[0] + bbox.low[0]) / 2;
+                const centerY = (bbox.high[1] + bbox.low[1]) / 2;
+                userModel = makerjs.model.mirror(userModel, child.flipX, child.flipY);
+                const tx = child.flipX ? 2 * centerX : 0;
+                const ty = child.flipY ? 2 * centerY : 0;
+                userModel = makerjs.model.moveRelative(userModel, [tx, ty]);
+            } else {
+                userModel = makerjs.model.mirror(userModel, child.flipX, child.flipY);
+            }
+        }
+
+        userModel = makerjs.model.moveRelative(userModel, [x, y]);
+        model.models[`user-parts-${index}`] = userModel;
+    })
 
     if (parent) {
         if (type === 'custom') {
             const [x, y] = position;
             model = makerjs.model.rotate(model, rotation, [0, 0]);
             model = makerjs.model.moveRelative(model, [x, y]);
+            // Flip using mirror, then translate back to center
+            if (flipX || flipY) {
+                const bbox = makerjs.measure.modelExtents(model);
+                if (bbox) {
+                    const centerX = (bbox.high[0] + bbox.low[0]) / 2;
+                    const centerY = (bbox.high[1] + bbox.low[1]) / 2;
+                    model = makerjs.model.mirror(model, flipX, flipY);
+                    const tx = flipX ? 2 * centerX : 0;
+                    const ty = flipY ? 2 * centerY : 0;
+                    model = makerjs.model.moveRelative(model, [tx, ty]);
+                } else {
+                    model = makerjs.model.mirror(model, flipX, flipY);
+                }
+            }
         }
     }
 
